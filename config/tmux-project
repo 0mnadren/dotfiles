@@ -1,0 +1,33 @@
+#!/usr/bin/env bash
+
+WORKSPACE=~/workspace
+
+# Izbor projekta
+selected=$(find "$WORKSPACE" -mindepth 1 -maxdepth 1 -type d | fzf)
+[ -z "$selected" ] && exit 0
+
+name=$(basename "$selected")
+
+# Kreiraj session ako ne postoji
+if ! tmux has-session -t "$name" 2>/dev/null; then
+    # Window 1: nvim
+    tmux new-session -d -s "$name" -c "$selected" -n nvim
+    tmux send-keys -t "$name":nvim "nvim" C-m
+
+    # Window 2: bash
+    tmux new-window -t "$name" -n bash -c "$selected"
+
+    # Window 3: server
+    tmux new-window -t "$name" -n bash -c "$selected"
+fi
+
+# Make sure nvim window is selected
+tmux select-window -t "$name":nvim
+
+# Attach ili switch
+if [ -z "$TMUX" ]; then
+    tmux attach -t "$name"
+else
+    tmux switch-client -t "$name"
+fi
+

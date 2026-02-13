@@ -1,0 +1,64 @@
+#!/usr/bin/env bash
+
+# Define the root directory for your projects
+WORKSPACE=~/workspace
+
+# 1. Use fzf to visually select a project folder
+# We use --print-query to capture what you typed ($query) AND what you picked ($match)
+result=$(find "$WORKSPACE" -mindepth 1 -maxdepth 1 -type d | fzf --print-query)
+
+# These lines extract the two pieces of info from fzf
+query=$(echo "$result" | sed -n '1p')
+match=$(echo "$result" | sed -n '2p')
+
+# If no project is selected and nothing was typed, exit quietly
+if [ -z "$query" ] && [ -z "$match" ]; then
+    exit 0
+fi
+
+# Get the folder name and replace dots with underscores (tmux session names cannot contain dots)
+# We calculate 'name' based on whether we are creating or selecting
+if [ -z "$match" ]; then
+    name=$(echo "$query" | tr . _)
+else
+    name=$(basename "$match" | tr . _)
+fi
+
+# 2. Determine the project path
+if [ -z "$match" ]; then
+    # No match found? Use the query to create a new folder
+    selected="$WORKSPACE/$query"
+    mkdir -p "$selected"
+    echo "Creating new project: $selected"
+else
+    # Match found? Use the existing folder
+    selected="$match"
+fi
+
+# 3. Check if the tmux session already exists
+if ! tmux has-session -t "$name" 2>/dev/null; then
+    # Create a new detached session (-d), name the first window 'nvim'
+    tmux new-session -d -s "$name" -c "$selected" -n nvim
+    
+    # Immediately launch Neovim in the first window
+    # tmux send-keys -t "$name":nvim "nvim ." C-m
+
+    # Create a third window specifically for running the FastAPI/Django server
+    tmux new-window -t "$name" -n server -c "$selected"
+
+    # Create a second window for general terminal tasks (Git, file management)
+    tmux new-window -t "$name" -n terminal -c "$selected"
+    
+    # Optional: Automatically activate virtual environment in the server window
+    # tmux send-keys -t "$name":server "source .venv/bin/activate" C-m
+fi
+
+# 4. Always ensure the 'nvim' window is focused before entering the session
+tmux select-window -t "$name":nvim
+
+# 5. If we are outside tmux, attach to the session. If inside, switch the client.
+if [ -z "$TMUX" ]; then
+    tmux attach -t "$name"
+else
+    tmux switch-client -t "$name"
+fi
